@@ -55,7 +55,9 @@ input[type=range]{width:100%;accent-color:var(--rf);height:28px}
 .seg input:checked + label{border-color:var(--rf);box-shadow:inset 0 0 0 1px var(--rf);background:var(--ok-soft)}
 .seg.warn input:checked + label.sev{border-color:var(--severe);box-shadow:inset 0 0 0 1px var(--severe);background:var(--severe-soft)}
 .seg input:focus-visible + label{outline:2px solid var(--rf);outline-offset:2px}
-@media (max-width:460px){.seg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.seg.warn{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:460px){.seg,.seg.warn{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.hint{font-size:13px;color:var(--muted);margin:0}
 .toggles{display:flex;flex-direction:column;gap:10px}
 .toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:15px}
 .toggle input{width:20px;height:20px;accent-color:var(--rf);flex:none}
@@ -147,22 +149,25 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
       <div class="field">
         <span class="label" id="warnLabel">Highest weather warning that day</span>
         <div class="seg warn" role="radiogroup" aria-labelledby="warnLabel">
-          <input type="radio" name="warning" id="w0" value="0"><label for="w0">None<small>No signal</small></label>
-          <input type="radio" name="warning" id="w1" value="1"><label for="w1" class="sev">Level 1<small>Amber / red rain, T1</small></label>
-          <input type="radio" name="warning" id="w2" value="2" checked><label for="w2" class="sev">Level 2<small>Black rain, T3</small></label>
-          <input type="radio" name="warning" id="w3" value="3"><label for="w3" class="sev">Level 3<small>T8 or higher</small></label>
+          <input type="radio" name="warning" id="w_none" value="none"><label for="w_none">None<small>No signal</small></label>
+          <input type="radio" name="warning" id="w_rain" value="rain"><label for="w_rain" class="sev">Amber / red rain<small>Level 1</small></label>
+          <input type="radio" name="warning" id="w_t1" value="t1"><label for="w_t1" class="sev">T1<small>Level 1</small></label>
+          <input type="radio" name="warning" id="w_black" value="black" checked><label for="w_black" class="sev">Black rain<small>Level 2</small></label>
+          <input type="radio" name="warning" id="w_t3" value="t3"><label for="w_t3" class="sev">T3<small>Level 2</small></label>
+          <input type="radio" name="warning" id="w_t8" value="t8"><label for="w_t8" class="sev">T8 or higher<small>Level 3</small></label>
         </div>
+        <p class="hint" id="signalHint">Picking a signal sets rainfall and wind to a typical 2021–25 day with that signal. You can still move the sliders.</p>
       </div>
 
       <div class="field">
         <div class="field-head"><label for="rain">Rainfall that day</label><span class="val" id="rainOut">80 mm</span></div>
-        <input type="range" id="rain" min="0" max="352" step="1" value="80">
+        <input type="range" id="rain" min="0" max="352" step="1" value="91">
         <div class="scale"><span>0</span><span>100</span><span>200</span><span>352 mm (2021–25 max)</span></div>
       </div>
 
       <div class="field">
         <div class="field-head"><label for="wind">Average wind speed that day</label><span class="val" id="windOut">30 km/h</span></div>
-        <input type="range" id="wind" min="5" max="53.5" step="0.5" value="30">
+        <input type="range" id="wind" min="5" max="53.5" step="0.5" value="21.5">
         <div class="scale"><span>5</span><span>15 (typical)</span><span>30</span><span>53.5 km/h (2021–25 max)</span></div>
       </div>
 
@@ -255,21 +260,31 @@ function predictLogit(x){
 const $=id=>document.getElementById(id);
 const SEASONS=["Winter","Spring","Summer","Autumn"];
 const WARN=["No warning","Level 1 warning","Level 2 warning","Level 3 warning"];
+// Typical day for each signal = median HKA rainfall and median wind on 2021-09 – 2025 days with that signal
+const SIGNALS={
+  none:{level:0,name:"No warning",rain:0,wind:14,days:1368},
+  rain:{level:1,name:"Amber / red rain",rain:23,wind:14,days:91},
+  t1:{level:1,name:"T1 signal",rain:0,wind:14,days:50},
+  black:{level:2,name:"Black rain",rain:91,wind:21.5,days:9},
+  t3:{level:2,name:"T3 signal",rain:7,wind:22.5,days:34},
+  t8:{level:3,name:"T8 or higher",rain:53,wind:26.5,days:24}
+};
 const PRESETS={
-  fine:{hour:14,season:0,warning:0,rain:0,wind:15,holiday:0,weekend:0,prevDay:0},
-  rush:{hour:9,season:2,warning:0,rain:0,wind:14,holiday:0,weekend:0,prevDay:0},
-  black:{hour:19,season:2,warning:2,rain:80,wind:30,holiday:0,weekend:1,prevDay:1},
-  t8:{hour:19,season:2,warning:3,rain:120,wind:45,holiday:0,weekend:0,prevDay:0}
+  fine:{hour:14,season:0,signal:"none",holiday:0,weekend:0,prevDay:0},
+  rush:{hour:9,season:2,signal:"none",holiday:0,weekend:0,prevDay:0},
+  black:{hour:19,season:2,signal:"black",holiday:0,weekend:1,prevDay:1},
+  t8:{hour:19,season:2,signal:"t8",holiday:0,weekend:0,prevDay:0}
 };
 const hh=h=>String(h).padStart(2,"0")+":00";
 function read(){
   return {hour:+$("hour").value,season:+document.querySelector('input[name=season]:checked').value,
-    warning:+document.querySelector('input[name=warning]:checked').value,rain:+$("rain").value,wind:+$("wind").value,
+    signal:document.querySelector('input[name=warning]:checked').value,
+    warning:SIGNALS[document.querySelector('input[name=warning]:checked').value].level,rain:+$("rain").value,wind:+$("wind").value,
     holiday:$("holiday").checked?1:0,weekend:$("weekend").checked?1:0,prevDay:$("prevDay").checked?1:0};
 }
 function apply(p){
   $("hour").value=p.hour; $("rain").value=p.rain; $("wind").value=p.wind;
-  $("s"+p.season).checked=true; $("w"+p.warning).checked=true;
+  $("s"+p.season).checked=true; $("w_"+p.signal).checked=true; setTypical(p.signal);
   $("holiday").checked=!!p.holiday; $("weekend").checked=!!p.weekend; $("prevDay").checked=!!p.prevDay;
   update();
 }
@@ -282,7 +297,7 @@ function update(){
   $("rainOut").textContent=c.rain+" mm"; $("windOut").textContent=c.wind+" km/h";
   $("rfPct").textContent=pct(rf); $("lrPct").textContent=pct(lr);
   $("rfFill").style.width=(rf*100).toFixed(1)+"%"; $("lrFill").style.width=(lr*100).toFixed(1)+"%";
-  const tags=[`<b>${hh(c.hour)}</b>${rush?" rush hour":""}`,SEASONS[c.season],WARN[c.warning],`${c.rain} mm rain`,`${c.wind} km/h wind`];
+  const tags=[`<b>${hh(c.hour)}</b>${rush?" rush hour":""}`,SEASONS[c.season],SIGNALS[c.signal].name,`${c.rain} mm rain`,`${c.wind} km/h wind`];
   if(c.holiday)tags.push("Public holiday"); if(c.weekend)tags.push("Weekend"); if(c.prevDay)tags.push("Severe weather the day before");
   $("summary").innerHTML=tags.map(t=>`<span>${t}</span>`).join("");
   const ratio=rf/0.239;
@@ -311,6 +326,12 @@ function drawChart(c){
   $("hourChart").innerHTML=s;
 }
 document.querySelectorAll("input").forEach(el=>el.addEventListener("input",update));
+function setTypical(sig){
+  const t=SIGNALS[sig]; $("rain").value=t.rain; $("wind").value=t.wind;
+  $("signalHint").textContent = sig==="none" ? "Picking a signal sets rainfall and wind to a typical 2021–25 day with that signal. You can still move the sliders."
+    : `${t.name}: rainfall and wind set to the typical day among ${t.days} days with this signal in 2021–25. You can still move the sliders.`;
+}
+document.querySelectorAll('input[name=warning]').forEach(el=>el.addEventListener("change",()=>{setTypical(el.value); update();}));
 document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>apply(PRESETS[b.dataset.preset])));
 update();
 </script>
