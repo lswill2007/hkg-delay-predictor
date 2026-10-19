@@ -211,7 +211,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
       <div class="fact"><div class="k">Training data</div><div class="v">113,351 flights</div><p>HKG passenger departures, 1 Jan – 30 Sep 2025</p></div>
       <div class="fact"><div class="k">Test data</div><div class="v">36,706 flights</div><p>1 Oct – 25 Dec 2025, never used for tuning</p></div>
       <div class="fact"><div class="k">AUC on test data</div><div class="v">0.575 · 0.578</div><p>Random forest · logistic. 0.5 is a coin flip, 1.0 is perfect.</p></div>
-      <div class="fact"><div class="k">High-risk cut-off</div><div class="v">22%</div><p>Chosen on validation months. Flags 56% of delayed test flights (random forest).</p></div>
+      <div class="fact"><div class="k">Flagging cut-off</div><div class="v">22%</div><p>Chosen on validation months to measure recall: flagging every flight above 22% catches 56% of delayed test flights (random forest).</p></div>
     </div>
     <p class="note">Weather inputs are whole-day values (the day's highest warning, total rainfall, average wind), which are only fully known after the day ends. The models describe how common delays were under these conditions in 2025; they are not a live forecast for a specific flight. Most delays come from causes not in the data, such as late inbound aircraft and air-traffic limits.</p>
   </details>
@@ -285,12 +285,12 @@ function update(){
   const tags=[`<b>${hh(c.hour)}</b>${rush?" rush hour":""}`,SEASONS[c.season],WARN[c.warning],`${c.rain} mm rain`,`${c.wind} km/h wind`];
   if(c.holiday)tags.push("Public holiday"); if(c.weekend)tags.push("Weekend"); if(c.prevDay)tags.push("Severe weather the day before");
   $("summary").innerHTML=tags.map(t=>`<span>${t}</span>`).join("");
-  const high=rf>=MODEL.threshold;
-  for(const id of ["pill","mPill"]){const el=$(id); el.className="pill "+(high?"high":"typ"); el.textContent=high?"High risk":"Typical risk";}
-  $("mRf").textContent=pct(rf); $("mLr").textContent=pct(lr);
   const ratio=rf/0.238;
+  const band= ratio>=1.15 ? ["high","Above average"] : ratio<=0.85 ? ["typ","Below average"] : ["typ","About average"];
+  for(const id of ["pill","mPill"]){const el=$(id); el.className="pill "+band[0]; el.textContent=band[1];}
+  $("mRf").textContent=pct(rf); $("mLr").textContent=pct(lr);
   $("verdictText").textContent= ratio>=1.15 ? `Random forest: about ${ratio.toFixed(1)}× the 2025 average.`
-    : ratio<=0.85 ? `Random forest: below the 2025 average of 24%.` : `Random forest: close to the 2025 average of 24%.`;
+    : ratio<=0.85 ? `Random forest: below the 2025 average of 24%.` : `Random forest: within ±15% of the 2025 average (24%).`;
   drawChart(c);
 }
 function drawChart(c){
