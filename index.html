@@ -106,7 +106,25 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
   .mbar .m small{font-size:12px;color:var(--muted)}
   .mbar .m b{font-family:var(--font-display);font-size:30px;font-variant-numeric:tabular-nums}
 }
+/* Model formulas panel (right column, under the hourly chart) */
+.formulas{display:flex;flex-direction:column;gap:10px}
+.formulas h3{font-family:var(--font-display);font-weight:600;font-size:16px;margin:0;display:flex;align-items:center;gap:8px}
+.formulas h3 i{display:inline-block;width:14px;height:3px;border-radius:2px}
+.eq{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:2px 0}
+.eq-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 28px}
+.tex{white-space:normal;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted)}
+.tex .katex-display{margin:0}
+.tex .katex{font-size:17px;color:var(--ink);white-space:nowrap}
+.tex .katex-display>.katex{text-align:left}
+.formulas .hint{max-width:none}
+.formulas .sub .katex,.formulas .hint .katex{font-size:1.08em}
+.formulas{container-type:inline-size}
+.eq-narrow{display:none}
+@container (max-width:520px){.eq-wide{display:none}.eq-narrow{display:block}.tex .katex{font-size:15px}}
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous" onload="renderFormulas()"></script>
 
 </head>
 <body>
@@ -206,6 +224,50 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
           <div class="legend"><span><i style="background:var(--rf)"></i>Random forest</span><span><i style="background:var(--logit)"></i>Logistic</span></div>
         </div>
         <div class="chart"><svg id="hourChart" viewBox="0 0 640 260" role="img" aria-label="Predicted delay chance by departure hour"></svg></div>
+      </div>
+
+      <div class="panel formulas" aria-label="Model formulas">
+        <div><h2>How the two models work</h2><p class="sub">Flight \(i\) is delayed (\(Y_i = 1\)) if it leaves 15+ minutes late.</p></div>
+
+        <h3><i style="background:var(--logit)"></i>Logistic regression</h3>
+        <div class="eq eq-wide"><div class="tex">
+\[
+\begin{aligned}
+\eta_i = \log \frac{P(Y_i = 1)}{1 - P(Y_i = 1)}
+  &= \beta_0 + \sum_{h=0}^{23} \alpha_h \, \text{Hour}_{h,i} + \sum_{s=1}^{4} \gamma_s \, \text{Season}_{s,i} \\
+  &\quad + \sum_{k=0}^{3} \delta_k \, \text{Warning}_{k,i} + \sum_{j=1}^{7} \beta_j \, z_{j,i}
+\end{aligned}
+\]
+        </div></div>
+        <div class="eq eq-narrow"><div class="tex">
+\[
+\begin{aligned}
+\eta_i &= \log \frac{P(Y_i = 1)}{1 - P(Y_i = 1)} \\
+  &= \beta_0 + \sum_{h=0}^{23} \alpha_h \, \text{Hour}_{h,i} + \sum_{s=1}^{4} \gamma_s \, \text{Season}_{s,i} \\
+  &\quad + \sum_{k=0}^{3} \delta_k \, \text{Warning}_{k,i} + \sum_{j=1}^{7} \beta_j \, z_{j,i}
+\end{aligned}
+\]
+        </div></div>
+        <div class="eq eq-row">
+          <div class="tex">\[ z_{j,i} = \frac{x_{j,i} - \bar{x}_j}{s_j}, \]</div>
+          <div class="tex">\[ \hat{P}(Y_i = 1) = \frac{1}{1 + e^{-\eta_i}} \]</div>
+        </div>
+
+        <h3><i style="background:var(--rf)"></i>Random forest</h3>
+        <div class="eq eq-row">
+          <div class="tex">\[ \hat{P}(Y_i = 1) = \frac{1}{200} \sum_{b=1}^{200} T_b(\mathbf{x}_i), \]</div>
+          <div class="tex">
+\[
+\hat{Y}_i =
+\begin{cases}
+  1, & \hat{P}(Y_i = 1) \geq 0.239 \\
+  0, & \text{otherwise}
+\end{cases}
+\]
+          </div>
+        </div>
+
+        <p class="hint">\(\text{Hour}\), \(\text{Season}\), \(\text{Warning}\): 0/1 indicators (warning level \(k = 0\) none … \(3\) = T8+). \(z_{j,i}\): rush hour, holiday, weekend, rainfall, trace rain, wind, severe weather the day before, standardised. \(T_b(\mathbf{x}_i)\): delayed share in the leaf of tree \(b\). \(0.239\): 2021–25 average delay rate (dashed line above).</p>
       </div>
     </section>
   </div>
@@ -334,6 +396,15 @@ function setTypical(sig){
 document.querySelectorAll('input[name=warning]').forEach(el=>el.addEventListener("change",()=>{setTypical(el.value); update();}));
 document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>apply(PRESETS[b.dataset.preset])));
 update();
+// Typeset the LaTeX in the formulas panel with KaTeX auto-render; if it fails to load, the LaTeX source stays visible.
+function renderFormulas(){
+  if(!window.renderMathInElement) return;
+  renderMathInElement(document.querySelector(".formulas"), {
+    delimiters:[{left:"\\[",right:"\\]",display:true},{left:"\\(",right:"\\)",display:false}],
+    fleqn:true, throwOnError:false
+  });
+}
+if(window.renderMathInElement) renderFormulas();
 </script>
 
 </body>
